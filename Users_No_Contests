@@ -1,0 +1,98 @@
+import requests
+import time
+
+# === Configuration ===
+# You can change this to any search term you want
+search_term = "bigwin" 
+# This is the correct public endpoint for fetching contests, filtering by channel handle
+contest_url = "https://api.splashsports.com/contest-service/api/contests"
+# This is the endpoint to find channels
+channel_url = "https://api.splashsports.com/commissioner-service/api/channels"
+headers = {
+    # IMPORTANT: Replace with your actual Bearer Token
+    "Authorization": f"Bearer {'<PASTE_YOUR_BEARER_TOKEN_HERE>'}",
+    "x-app-platform": "web",
+    "x-app-version": "1.183.0",
+    "Accept": "application/json",
+    "User-Agent": "Mozilla/5.0",
+    "Referer": "https://app.splashsports.com/",
+    "Origin": "https://app.splashsports.com",
+}
+
+# === Step 1: Fetch all unique handles from the commissioner service ===
+page = 1
+handles = set()
+print(f"--- Searching for channels with term: '{search_term}' ---")
+while True:
+    print(f"Fetching page {page} of handles...")
+    params = {"page": page, "q": search_term, "size": 20} # Added size for clarity
+    try:
+        response = requests.get(channel_url, headers=headers, params=params)
+        response.raise_for_status() # This will raise an error for bad status codes (4xx or 5xx)
+
+        data = response.json()
+        page_data = data.get("data", [])
+        
+        if not page_data:
+            print("No more channels found on this page.")
+            break
+
+        for ch in page_data:
+            if "handle" in ch:
+                handles.add(ch["handle"])
+
+        # Check if we are on the last page
+        if page >= data.get("totalPages", 1):
+            print("Reached the last page of channels.")
+            break
+        
+        page += 1
+        time.sleep(0.5) # Be respectful to the API
+
+    except requests.exceptions.RequestException as e:
+        print(f"An error occurred while fetching channels: {e}")
+        break
+
+print(f"\nFound {len(handles)} unique handles.")
+
+# === Step 2: Fetch public contests for each handle ===
+handle_contests = {}
+
+for handle in sorted(list(handles)):
+    print(f"\nFetching contests for channel: {handle}")
+    # Use the correct public endpoint with the 'channelHandle' parameter
+    params = {"channelHandle": handle, "page": 1, "size": 100} # Fetch up to 100 contests
+    try:
+        response = requests.get(contest_url, headers=headers, params=params)
+        response.raise_for_status() # Check for HTTP errors
+
+        contests_data = response.json().get("data", [])
+        # Extract contest name, defaulting if not found
+        contests = [c.get("name", "Unnamed Contest") for c in contests_data]
+        handle_contests[handle] = contests
+        
+        if contests:
+            print(f"  Found {len(contests)} contest(s).")
+        else:
+            print(f"  No public contests found for this channel.")
+
+    except requests.exceptions.RequestException as e:
+        print(f"  Error fetching contests for {handle}: {e}")
+        continue # Move to the next handle
+
+    time.sleep(0.5)  # Respectful delay between requests
+
+# === Step 3: Output Results ===
+print("\n\n==== All Public Contest Entries by Handle ====\n")
+if not handle_contests:
+    print("No contests were found for any of the handles.")
+else:
+    for handle, contests in handle_contests.items():
+        print(f"{handle}:")
+        if contests:
+            for c in contests:
+                print(f"  - {c}")
+        else:
+            print("  (No public contests found)")
+
+

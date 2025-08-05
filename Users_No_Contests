@@ -3,7 +3,7 @@ import time
 
 # === Configuration ===
 # You can change this to any search term you want
-search_term = "bigwin" 
+search_term = "bigwin01" 
 # This is the correct public endpoint for fetching contests, filtering by channel handle
 contest_url = "https://api.splashsports.com/contest-service/api/contests"
 # This is the endpoint to find channels
@@ -21,7 +21,7 @@ headers = {
 
 # === Step 1: Fetch all unique handles from the commissioner service ===
 page = 1
-handles = set()
+handles = {}
 print(f"--- Searching for channels with term: '{search_term}' ---")
 while True:
     print(f"Fetching page {page} of handles...")
@@ -31,15 +31,14 @@ while True:
         response.raise_for_status() # This will raise an error for bad status codes (4xx or 5xx)
 
         data = response.json()
-        page_data = data.get("data", [])
+        page_data = data["data"]
         
         if not page_data:
             print("No more channels found on this page.")
             break
 
-        for ch in page_data:
-            if "handle" in ch:
-                handles.add(ch["handle"])
+        for data_line in page_data:
+            handles[data_line["handle"]] = data_line["userId"]
 
         # Check if we are on the last page
         if page >= data.get("totalPages", 1):
@@ -58,12 +57,12 @@ print(f"\nFound {len(handles)} unique handles.")
 # === Step 2: Fetch public contests for each handle ===
 handle_contests = {}
 
-for handle in sorted(list(handles)):
+for handle in handles:
     print(f"\nFetching contests for channel: {handle}")
     # Use the correct public endpoint with the 'channelHandle' parameter
     params = {"channelHandle": handle, "page": 1, "size": 100} # Fetch up to 100 contests
     try:
-        response = requests.get(contest_url, headers=headers, params=params)
+        response = requests.get(f"https://api.splashsports.com/contests-service/api/commissioners/{handles[handle]}/contests?association=ENTERED&contestStatuses=SCHEDULED&contestStatuses=IN_PROGRESS&includeEntrantsCount=true&includePicksReminder=false&includeUnlisted=true&limit=20&minEntries=0&offset=0&source=SPLASH", headers=headers)
         response.raise_for_status() # Check for HTTP errors
 
         contests_data = response.json().get("data", [])
